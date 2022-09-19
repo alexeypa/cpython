@@ -868,6 +868,9 @@ class Action(_AttributeHolder):
         ]
         return [(name, getattr(self, name)) for name in names]
 
+    def clone_dest(self, namespace):
+        pass
+
     def format_usage(self):
         return self.option_strings[0]
 
@@ -1037,9 +1040,13 @@ class _AppendAction(Action):
             help=help,
             metavar=metavar)
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def clone_dest(self, namespace):
         items = getattr(namespace, self.dest, None)
         items = _copy_items(items)
+        setattr(namespace, self.dest, items)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        items = getattr(namespace, self.dest, None)
         items.append(values)
         setattr(namespace, self.dest, items)
 
@@ -1064,9 +1071,13 @@ class _AppendConstAction(Action):
             help=help,
             metavar=metavar)
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def clone_dest(self, namespace):
         items = getattr(namespace, self.dest, None)
         items = _copy_items(items)
+        setattr(namespace, self.dest, items)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        items = getattr(namespace, self.dest, None)
         items.append(self.const)
         setattr(namespace, self.dest, items)
 
@@ -1240,9 +1251,13 @@ class _SubParsersAction(Action):
             getattr(namespace, _UNRECOGNIZED_ARGS_ATTR).extend(arg_strings)
 
 class _ExtendAction(_AppendAction):
-    def __call__(self, parser, namespace, values, option_string=None):
+    def clone_dest(self, namespace):
         items = getattr(namespace, self.dest, None)
         items = _copy_items(items)
+        setattr(namespace, self.dest, items)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        items = getattr(namespace, self.dest, None)
         items.extend(values)
         setattr(namespace, self.dest, items)
 
@@ -1950,6 +1965,8 @@ class ArgumentParser(_AttributeHolder, _ActionsContainer):
         seen_actions = set()
         seen_non_default_actions = set()
 
+        seen_dest = set()
+
         def take_action(action, argument_strings, option_string=None):
             seen_actions.add(action)
             argument_values = self._get_values(action, argument_strings)
@@ -1968,6 +1985,12 @@ class ArgumentParser(_AttributeHolder, _ActionsContainer):
             # take the action if we didn't receive a SUPPRESS value
             # (e.g. from a default)
             if argument_values is not SUPPRESS:
+                # Clone the destination if needed before applying the action
+                # for the first time.
+                if action.dest not in seen_dest:
+                    action.clone_dest(namespace)
+                    seen_dest.add(action.dest)
+
                 action(self, namespace, argument_values, option_string)
 
         # function to convert arg_strings into an optional action
